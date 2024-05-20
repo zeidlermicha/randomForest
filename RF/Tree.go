@@ -248,7 +248,7 @@ func predicate[T Feature](node *TreeNode[T], input []T) map[string]int {
 		} else if node.Right != nil {
 			return predicate(node.Right, input)
 		}
-	case reflect.TypeFor[string]():
+	default:
 		if value == node.Value && node.Left != nil {
 			return predicate(node.Left, input)
 		} else if node.Right != nil {

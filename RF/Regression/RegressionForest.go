@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"os"
+	"runtime"
 	"sync"
 	"time"
 )
@@ -18,14 +19,17 @@ type Forest[T Feature] struct {
 }
 
 func BuildForest[T Feature](inputs [][]T, labels []float64, treesAmount, samplesAmount, selectedFeatureAmount int) *Forest[T] {
+	NumWorkers := runtime.NumCPU()
 	forest := &Forest[T]{}
 	forest.Trees = make([]*Tree[T], treesAmount)
 	prog_counter := 0
 	mutex := &sync.Mutex{}
-	var wait sync.WaitGroup
+	s := make(chan bool, NumWorkers)
 	for i := 0; i < treesAmount; i++ {
-		wait.Add(1)
+		s <- true
+
 		go func(x int) {
+			defer func() { <-s }()
 			fmt.Printf(">> %v buiding %vth tree...\n", time.Now(), x)
 			forest.Trees[x] = BuildTree(inputs, labels, samplesAmount, selectedFeatureAmount)
 			//fmt.Printf("<< %v the %vth tree is done.\n",time.Now(), x)
@@ -33,11 +37,11 @@ func BuildForest[T Feature](inputs [][]T, labels []float64, treesAmount, samples
 			prog_counter += 1
 			fmt.Printf("%v tranning progress %.0f%%\n", time.Now(), float64(prog_counter)/float64(treesAmount)*100)
 			mutex.Unlock()
-			wait.Done()
 		}(i)
 	}
-
-	wait.Wait()
+	for i := 0; i < NumWorkers; i++ {
+		s <- true
+	}
 
 	fmt.Println("all done.")
 	return forest

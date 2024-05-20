@@ -10,7 +10,7 @@ import (
 )
 
 type Feature interface {
-	string | float64
+	string | float64 | int
 }
 
 type Forest[T Feature] struct {
