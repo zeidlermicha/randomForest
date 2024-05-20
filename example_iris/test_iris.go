@@ -1,13 +1,14 @@
 package main
 
 import (
-	"../RF"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/zeidlermicha/RF.go/RF"
 )
 
 func main() {
@@ -20,7 +21,7 @@ func main() {
 	lines := strings.Split(s_content, "\n")
 
 	// set up variables for random forest
-	inputs := make([][]interface{}, 0)
+	inputs := make([][]float64, 0)
 	targets := make([]string, 0)
 	for _, line := range lines {
 
@@ -32,7 +33,7 @@ func main() {
 		tup := strings.Split(line, ",")
 		pattern := tup[:len(tup)-1]
 		target := tup[len(tup)-1]
-		X := make([]interface{}, 0)
+		X := make([]float64, 0)
 		for _, x := range pattern {
 			f_x, _ := strconv.ParseFloat(x, 64)
 			X = append(X, f_x)
@@ -41,10 +42,10 @@ func main() {
 
 		targets = append(targets, target)
 	}
-	train_inputs := make([][]interface{}, 0)
+	train_inputs := make([][]float64, 0)
 	train_targets := make([]string, 0)
 
-	test_inputs := make([][]interface{}, 0)
+	test_inputs := make([][]float64, 0)
 	test_targets := make([]string, 0)
 
 	for i, x := range inputs {
@@ -63,11 +64,11 @@ func main() {
 		}
 	}
 
-	forest := RF.DefaultForest(inputs, targets, 100) //100 trees
+	forest := RF.DefaultForest[float64](inputs, targets, 100) //100 trees
 
 	RF.DumpForest(forest, "rf.bin")
 
-	forest = RF.LoadForest("rf.bin")
+	forest = RF.LoadForest[float64]("rf.bin")
 
 	err_count := 0.0
 	for i := 0; i < len(test_inputs); i++ {

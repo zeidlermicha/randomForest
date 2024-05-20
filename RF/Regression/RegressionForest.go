@@ -1,81 +1,81 @@
 package Regression
 
 import (
-	"math"
-	"time"
-	"math/rand"
-	"fmt"
-	"os"
 	"encoding/json"
+	"fmt"
+	"math"
+	"os"
 	"sync"
+	"time"
 )
-type Forest struct{
-	Trees []*Tree
+
+type Feature interface {
+	string | float64 | int
 }
 
-func BuildForest(inputs [][]interface{},labels []float64, treesAmount, samplesAmount, selectedFeatureAmount int) *Forest{
-	rand.Seed(time.Now().UnixNano())
-	forest := &Forest{}
-	forest.Trees = make([]*Tree,treesAmount)
-	done_flag := make(chan bool)
+type Forest[T Feature] struct {
+	Trees []*Tree[T]
+}
+
+func BuildForest[T Feature](inputs [][]T, labels []float64, treesAmount, samplesAmount, selectedFeatureAmount int) *Forest[T] {
+	forest := &Forest[T]{}
+	forest.Trees = make([]*Tree[T], treesAmount)
 	prog_counter := 0
 	mutex := &sync.Mutex{}
-	for i:=0;i<treesAmount;i++{
-		go func(x int){
+	var wait sync.WaitGroup
+	for i := 0; i < treesAmount; i++ {
+		wait.Add(1)
+		go func(x int) {
 			fmt.Printf(">> %v buiding %vth tree...\n", time.Now(), x)
-			forest.Trees[x] = BuildTree(inputs,labels,samplesAmount,selectedFeatureAmount)
+			forest.Trees[x] = BuildTree(inputs, labels, samplesAmount, selectedFeatureAmount)
 			//fmt.Printf("<< %v the %vth tree is done.\n",time.Now(), x)
 			mutex.Lock()
-			prog_counter+=1
-			fmt.Printf("%v tranning progress %.0f%%\n",time.Now(),float64(prog_counter) / float64(treesAmount)*100) 
+			prog_counter += 1
+			fmt.Printf("%v tranning progress %.0f%%\n", time.Now(), float64(prog_counter)/float64(treesAmount)*100)
 			mutex.Unlock()
-			done_flag <- true
+			wait.Done()
 		}(i)
 	}
 
-	for i:=1;i<=treesAmount;i++{
-		<-done_flag
-	}
+	wait.Wait()
 
 	fmt.Println("all done.")
 	return forest
 }
 
-func DefaultForest(inputs [][]interface{},labels []float64, treesAmount int) *Forest{
-	m := int( math.Sqrt( float64( len(inputs[0]) ) ) ) 
-	n := int( math.Sqrt( float64( len(inputs) ) )  )
-	return BuildForest(inputs,labels, treesAmount,n,m)
+func DefaultForest[T Feature](inputs [][]T, labels []float64, treesAmount int) *Forest[T] {
+	m := int(math.Sqrt(float64(len(inputs[0]))))
+	n := int(math.Sqrt(float64(len(inputs))))
+	return BuildForest[T](inputs, labels, treesAmount, n, m)
 }
 
-func (self *Forest) Predicate(input []interface{}) float64{
+func (self *Forest[T]) Predicate(input []T) float64 {
 	total := 0.0
-	for i:=0;i<len(self.Trees);i++{
-		total += PredicateTree(self.Trees[i],input)
+	for i := 0; i < len(self.Trees); i++ {
+		total += PredicateTree(self.Trees[i], input)
 	}
 	avg := total / float64(len(self.Trees))
 	return avg
 }
 
-func DumpForest(forest *Forest, fileName string){
-	out_f, err:=os.OpenFile(fileName,os.O_CREATE | os.O_RDWR,0777)
-	if err!=nil{
-		panic("failed to create "+fileName)
+func DumpForest[T Feature](forest *Forest[T], fileName string) {
+	out_f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0777)
+	if err != nil {
+		panic("failed to create " + fileName)
 	}
 	defer out_f.Close()
 	encoder := json.NewEncoder(out_f)
 	encoder.Encode(forest)
 }
 
-func LoadForest(fileName string) *Forest{
-	in_f ,err := os.Open(fileName)
-	if err!=nil{
-		panic("failed to open "+fileName)
+func LoadForest[T Feature](fileName string) *Forest[T] {
+	in_f, err := os.Open(fileName)
+	if err != nil {
+		panic("failed to open " + fileName)
 	}
 	defer in_f.Close()
 	decoder := json.NewDecoder(in_f)
-	forest := &Forest{}
+	forest := &Forest[T]{}
 	decoder.Decode(forest)
 	return forest
 }
-
-
