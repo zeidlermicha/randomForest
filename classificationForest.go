@@ -37,6 +37,7 @@ type BaseForest[F Feature] struct {
 	Data            [][]F `json:"-"`
 	BufferSize      int
 	TreeLimit       int
+	MaxDepth        int
 }
 
 type ClassificationForest[F Feature, L Label] struct {

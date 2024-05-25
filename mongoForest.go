@@ -2,10 +2,8 @@ package randomForest
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
-	"os"
 	"sync"
 	"time"
 
@@ -20,11 +18,11 @@ type DataDTO[F Feature] struct {
 
 type MongoForest[F Feature] struct {
 	*BaseForest[F]
-	Labels     []float64
-	Trees      []*RegressionTree[F]
-	Range      float64
-	Game       string
-	Collection *mongo.Collection `bson:"-"`
+	Labels   []float64
+	Trees    []*RegressionTree[F]
+	Range    float64
+	Game     string
+	database *mongo.Database `bson:"-"`
 }
 
 func (f MongoForest[F]) Importance() []float64 {
@@ -41,13 +39,19 @@ func (f MongoForest[F]) Importance() []float64 {
 	return imp
 }
 
-func NewMongoForest[F Feature](collection *mongo.Collection, treeCount int, samplesAmount, selectedFeatureAmount, featureCount int, r float64, game string) *MongoForest[F] {
+func NewMongoForest[F Feature](database *mongo.Database, treeCount int, samplesAmount, selectedFeatureAmount, featureCount int, r float64, game string) *MongoForest[F] {
 	return &MongoForest[F]{
-		Trees:      make([]*RegressionTree[F], 0),
-		Collection: collection,
-		Range:      r,
-		Game:       game,
-		BaseForest: &BaseForest[F]{TreeLimit: treeCount, NSize: samplesAmount, MFeatures: selectedFeatureAmount, Features: featureCount},
+		Trees:    make([]*RegressionTree[F], 0),
+		database: database,
+		Range:    r,
+		Game:     game,
+		BaseForest: &BaseForest[F]{
+			TreeLimit: treeCount,
+			NSize:     samplesAmount,
+			MFeatures: selectedFeatureAmount,
+			Features:  featureCount,
+			MaxDepth:  10,
+		},
 	}
 }
 
@@ -82,7 +86,7 @@ func getData(collection mongo.Collection, game string, count int) (*mongo.Cursor
 }
 
 func (forest *MongoForest[F]) BuildTree() *RegressionTree[F] {
-	cursor, err := getData(*forest.Collection, forest.Game, forest.NSize)
+	cursor, err := getData(*forest.database.Collection("steps"), forest.Game, forest.NSize)
 	if err != nil {
 		panic(err)
 	}
@@ -99,10 +103,10 @@ func (forest *MongoForest[F]) BuildTree() *RegressionTree[F] {
 	}
 
 	tree := &RegressionTree[F]{}
-	tree.Root = buildRegressionNode(samples, samples_labels, forest.MFeatures)
+	tree.Root = buildRegressionNode(samples, samples_labels, forest.MFeatures, forest.MaxDepth)
 	count := 0
 	e := 0.0
-	cursor, err = getData(*forest.Collection, forest.Game, forest.NSize/10)
+	cursor, err = getData(*forest.database.Collection("steps"), forest.Game, forest.NSize/10)
 	if err != nil {
 		panic(err)
 	}
@@ -116,24 +120,41 @@ func (forest *MongoForest[F]) BuildTree() *RegressionTree[F] {
 	return tree
 }
 
-func (forest *MongoForest[F]) DumpForest(fileName string) {
-	out_f, err := os.OpenFile(fileName, os.O_CREATE|os.O_RDWR, 0777)
-	if err != nil {
-		panic("failed to create " + fileName)
+func (forest *MongoForest[F]) Predicate(input []F) float64 {
+	total := 0.0
+	for i := 0; i < len(forest.Trees); i++ {
+		total += forest.Trees[i].Predicate(input)
 	}
-	defer out_f.Close()
-	encoder := json.NewEncoder(out_f)
-	encoder.Encode(forest)
+	avg := total / float64(len(forest.Trees))
+	return avg
 }
 
-func LoadMongoForest[F Feature](fileName string) *MongoForest[F] {
-	in_f, err := os.Open(fileName)
-	if err != nil {
-		panic("failed to open " + fileName)
+func (forest *MongoForest[F]) WeightedPredicate(input []F) float64 {
+	total := 0.0
+	v := 0.0
+	for i := 0; i < len(forest.Trees); i++ {
+		e := 1.0001 - forest.Trees[i].Validation
+		w := 0.5 * math.Log(forest.Range*(1-e)/e)
+		if w > 0 {
+			v += forest.Trees[i].Predicate(input) * w
+			total += w
+		}
 	}
-	defer in_f.Close()
-	decoder := json.NewDecoder(in_f)
-	forest := &MongoForest[F]{}
-	decoder.Decode(forest)
-	return forest
+
+	return v / total
+}
+
+func (forest *MongoForest[F]) DumpForest() {
+	forest.database.Collection("forests").InsertOne(context.Background(), forest)
+}
+
+func LoadMongoForest[F Feature](database *mongo.Database, game string) *MongoForest[F] {
+	result := database.Collection("forests").FindOne(context.Background(), bson.D{{Key: "game", Value: game}})
+	if result.Err() != nil {
+		panic(result.Err())
+	}
+	var forest MongoForest[F]
+	result.Decode(&forest)
+	forest.database = database
+	return &forest
 }

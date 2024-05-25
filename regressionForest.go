@@ -34,7 +34,7 @@ func (f RegressionForest[F]) Importance() []float64 {
 func NewRegressionForest[F Feature](bufferSize int, treeLimit int, samplesAmount, selectedFeatureAmount float64) *RegressionForest[F] {
 	return &RegressionForest[F]{
 		Trees:      make([]*RegressionTree[F], 0),
-		BaseForest: &BaseForest[F]{BufferSize: bufferSize, TreeLimit: treeLimit, NSizeFactor: samplesAmount, MFeaturesFactor: selectedFeatureAmount},
+		BaseForest: &BaseForest[F]{BufferSize: bufferSize, TreeLimit: treeLimit, NSizeFactor: samplesAmount, MFeaturesFactor: selectedFeatureAmount, MaxDepth: 10},
 	}
 }
 
@@ -99,7 +99,7 @@ func (forest *RegressionForest[F]) BuildTree() *RegressionTree[F] {
 	}
 
 	tree := &RegressionTree[F]{}
-	tree.Root = buildRegressionNode(samples, samples_labels, forest.MFeatures)
+	tree.Root = buildRegressionNode(samples, samples_labels, forest.MFeatures, forest.MaxDepth)
 	count := 0
 	e := 0.0
 	for i := 0; i < len(forest.Data); i++ {

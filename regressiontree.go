@@ -122,7 +122,7 @@ func getBestMSEGain[F Feature](samples [][]F, c int, samples_labels []float64, c
 	return best_gain, best_value, best_total_l, best_total_r
 }
 
-func buildRegressionNode[F Feature](samples [][]F, samples_labels []float64, selected_feature_count int) *RegressionNode[F] {
+func buildRegressionNode[F Feature](samples [][]F, samples_labels []float64, selected_feature_count int, depth int) *RegressionNode[F] {
 
 	column_count := len(samples[0])
 	//split_count := int(math.Log(float64(column_count)))
@@ -157,7 +157,7 @@ func buildRegressionNode[F Feature](samples [][]F, samples_labels []float64, sel
 		}
 	}
 
-	if best_gain > 0 && best_total_l > 0 && best_total_r > 0 {
+	if best_gain > 0 && best_total_l > 0 && best_total_r > 0 && depth > 0 {
 		//fmt.Println(best_part_l,best_part_r)
 		node := &RegressionNode[F]{
 			Size:    len(samples_labels),
@@ -166,8 +166,8 @@ func buildRegressionNode[F Feature](samples [][]F, samples_labels []float64, sel
 		node.Value = &best_value
 		node.Column = best_column
 		bestPartL, bestPartR := splitSamples(samples, best_column_type, best_column, best_value)
-		node.Left = buildRegressionNode(getSamples(samples, bestPartL), getLabels(samples_labels, bestPartL), selected_feature_count)
-		node.Right = buildRegressionNode(getSamples(samples, bestPartR), getLabels(samples_labels, bestPartR), selected_feature_count)
+		node.Left = buildRegressionNode(getSamples(samples, bestPartL), getLabels(samples_labels, bestPartL), selected_feature_count, depth-1)
+		node.Right = buildRegressionNode(getSamples(samples, bestPartR), getLabels(samples_labels, bestPartR), selected_feature_count, depth-1)
 		return node
 	}
 
@@ -217,7 +217,7 @@ func predicate[T Feature](node *RegressionNode[T], input []T) float64 {
 	return 0
 }
 
-func BuildTree[F Feature](inputs [][]F, labels []float64, samples_count, selected_feature_count int) *RegressionTree[F] {
+func BuildTree[F Feature](inputs [][]F, labels []float64, samples_count, selected_feature_count, maxDepth int) *RegressionTree[F] {
 
 	samples := make([][]F, samples_count)
 	samples_labels := make([]float64, samples_count)
@@ -228,7 +228,7 @@ func BuildTree[F Feature](inputs [][]F, labels []float64, samples_count, selecte
 	}
 
 	tree := &RegressionTree[F]{}
-	tree.Root = buildRegressionNode(samples, samples_labels, selected_feature_count)
+	tree.Root = buildRegressionNode(samples, samples_labels, selected_feature_count, maxDepth)
 
 	return tree
 }
