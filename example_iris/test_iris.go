@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/zeidlermicha/RF.go/RF"
+	"github.com/zeidlermicha/randomForest"
 )
 
 func main() {
@@ -64,15 +64,11 @@ func main() {
 		}
 	}
 
-	forest := RF.DefaultForest[float64](inputs, targets, 100) //100 trees
-
-	RF.DumpForest(forest, "rf.bin")
-
-	forest = RF.LoadForest[float64]("rf.bin")
-
+	forest := randomForest.NewClassificationForest[float64, string](10000, 100, 80, 4) //100 trees
+	forest.Train(inputs, targets, 100)
 	err_count := 0.0
 	for i := 0; i < len(test_inputs); i++ {
-		output := forest.Predicate(test_inputs[i])
+		output := forest.WeightedPredicate(test_inputs[i])
 		expect := test_targets[i]
 		fmt.Println(output, expect)
 		if output != expect {

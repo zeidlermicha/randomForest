@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/zeidlermicha/RF.go/RF/Regression"
+	"github.com/zeidlermicha/randomForest"
 	//"math"
 )
 
@@ -68,8 +68,9 @@ func main() {
 	fmt.Println(inputs)
 	fmt.Println(targets)
 
-	forest := Regression.BuildForest(inputs, targets, 100, len(inputs), 10)
-
+	//forest := (inputs, targets, 100, len(inputs), 10)
+	forest := randomForest.NewRegressionForest[float64](10000, 100, 14, 10)
+	forest.Train(inputs, targets, 100)
 	inputs = append(inputs, Q([]int{0, 2, 4, 8}))
 	inputs = append(inputs, Q([]int{2, 5, 8, 1}))
 

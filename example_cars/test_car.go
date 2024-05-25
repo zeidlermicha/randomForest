@@ -7,11 +7,10 @@ import (
 
 	//"strconv"
 	"os"
-
 	"time"
 
+	"github.com/zeidlermicha/randomForest"
 	//"math"
-	"github.com/zeidlermicha/RF.go/RF"
 )
 
 func main() {
@@ -36,9 +35,7 @@ func main() {
 		pattern := tup[:len(tup)-1]
 		target := tup[len(tup)-1]
 		X := make([]string, 0)
-		for _, x := range pattern {
-			X = append(X, x)
-		}
+		X = append(X, pattern...)
 		inputs = append(inputs, X)
 
 		targets = append(targets, target)
@@ -66,13 +63,14 @@ func main() {
 		}
 	}
 
-	forest := RF.BuildForest(inputs, targets, 10, 500, len(train_inputs[0])) //100 trees
-
+	forest := randomForest.NewClassificationForest[string, string](10000, 100, 0.8, 1) //100 trees
+	forest.Train(test_inputs, test_targets, 20)
+	forest.Train(train_inputs, train_targets, 10)
 	test_inputs = train_inputs
 	test_targets = train_targets
 	err_count := 0.0
 	for i := 0; i < len(test_inputs); i++ {
-		output := forest.Predicate(test_inputs[i])
+		output := forest.WeightedPredicate(test_inputs[i])
 		expect := test_targets[i]
 		//fmt.Println(output,expect)
 		if output != expect {
@@ -80,7 +78,7 @@ func main() {
 		}
 	}
 	fmt.Println("success rate:", 1.0-err_count/float64(len(test_inputs)))
-
+	fmt.Println("importance:", forest.Importance())
 	fmt.Println(time.Since(start))
 
 }

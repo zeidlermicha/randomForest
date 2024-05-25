@@ -1,55 +1,49 @@
-// a random forest implemtation in GoLang
-package Regression
+package randomForest
 
 import (
 	"math/rand"
 	"reflect"
-	//"fmt"
 )
 
-const CAT = "cat"
-const NUMERIC = "numeric"
-
-type TreeNode[T Feature] struct {
-	ColumnNo int //column number
-	Value    *T
-	Left     *TreeNode[T]
-	Right    *TreeNode[T]
-	Label    float64
+type RegressionTree[F Feature] struct {
+	Root       *RegressionNode[F]
+	Validation float64
 }
 
-type Tree[T Feature] struct {
-	Root *TreeNode[T]
+type RegressionNode[F Feature] struct {
+	Size    int
+	Value   *F
+	Left    *RegressionNode[F]
+	Right   *RegressionNode[F]
+	Column  int
+	Label   float64
+	Measure float64
 }
 
-func getRandomRange(N int, M int) []int {
-	tmp := make([]int, N)
-	for i := 0; i < N; i++ {
-		tmp[i] = i
+func (tree RegressionTree[F]) importance(nFeatures int) []float64 {
+	imp := make([]float64, nFeatures)
+	tree.Root.importance(imp)
+	//normalize
+	sum := 0.0
+	for i := 0; i < nFeatures; i++ {
+		sum += imp[i]
 	}
-	for i := 0; i < M; i++ {
-		j := i + int(rand.Float64()*float64(N-i))
-		tmp[i], tmp[j] = tmp[j], tmp[i]
+	if sum > 0 {
+		for i := 0; i < nFeatures; i++ {
+			imp[i] = imp[i] / sum
+		}
 	}
-
-	return tmp[:M]
+	return imp
 }
 
-func getSamples[T Feature](ary [][]T, index []int) [][]T {
-	//fmt.Println("ary",ary)
-	result := make([][]T, len(index))
-	for i := 0; i < len(index); i++ {
-		result[i] = ary[index[i]]
+func (node RegressionNode[F]) importance(imp []float64) {
+	imp[node.Column] += float64(node.Size) * node.Measure
+	if node.Left != nil {
+		node.Left.importance(imp)
 	}
-	return result
-}
-
-func getLabels(ary []float64, index []int) []float64 {
-	result := make([]float64, len(index))
-	for i := 0; i < len(index); i++ {
-		result[i] = ary[index[i]]
+	if node.Right != nil {
+		node.Right.importance(imp)
 	}
-	return result
 }
 
 func getMSE(labels []float64) float64 {
@@ -70,13 +64,13 @@ func getMSE(labels []float64) float64 {
 	return mse
 }
 
-func getBestGain[T Feature](samples [][]T, c int, samples_labels []float64, column_type string, current_mse float64) (float64, T, int, int) {
-	var best_value T
+func getBestMSEGain[F Feature](samples [][]F, c int, samples_labels []float64, column_type ColumnType, current_mse float64) (float64, F, int, int) {
+	var best_value F
 	best_gain := 0.0
 	best_total_r := 0
 	best_total_l := 0
 
-	uniq_values := make(map[T]int)
+	uniq_values := make(map[F]int)
 	for i := 0; i < len(samples); i++ {
 		uniq_values[samples[i][c]] = 1
 	}
@@ -128,55 +122,30 @@ func getBestGain[T Feature](samples [][]T, c int, samples_labels []float64, colu
 	return best_gain, best_value, best_total_l, best_total_r
 }
 
-func splitSamples[T Feature](samples [][]T, column_type string, c int, value T, part_l *[]int, part_r *[]int) {
-	if column_type == CAT {
-		for j := 0; j < len(samples); j++ {
-			if samples[j][c] == value {
-				*part_l = append(*part_l, j)
-			} else {
-				*part_r = append(*part_r, j)
-			}
-		}
-	}
-	if column_type == NUMERIC {
-		for j := 0; j < len(samples); j++ {
-			if samples[j][c] <= value {
-				*part_l = append(*part_l, j)
-			} else {
-				*part_r = append(*part_r, j)
-			}
-		}
-	}
-}
+func buildRegressionNode[F Feature](samples [][]F, samples_labels []float64, selected_feature_count int) *RegressionNode[F] {
 
-func buildTree[T Feature](samples [][]T, samples_labels []float64, selected_feature_count int) *TreeNode[T] {
-	//fmt.Println(len(samples))
-	//find a best splitter
-	//fmt.Println(samples)
-	//fmt.Println("~~~~")
 	column_count := len(samples[0])
 	//split_count := int(math.Log(float64(column_count)))
 	split_count := selected_feature_count
 	columns_choosen := getRandomRange(column_count, split_count)
 
 	best_gain := 0.0
-	var best_part_l []int = make([]int, 0, len(samples))
-	var best_part_r []int = make([]int, 0, len(samples))
-	var best_value T
+	var best_value F
 	var best_column int
 	var best_total_l int = 0
 	var best_total_r int = 0
-	var best_column_type string
+	var best_column_type ColumnType
 
 	current_mse := getMSE(samples_labels)
 
 	for _, c := range columns_choosen {
 		column_type := CAT
+
 		if reflect.TypeOf(samples[0][c]) == reflect.TypeFor[float64]() {
 			column_type = NUMERIC
 		}
-		//fmt.Println(column_type)
-		gain, value, total_l, total_r := getBestGain(samples, c, samples_labels, column_type, current_mse)
+
+		gain, value, total_l, total_r := getBestMSEGain(samples, c, samples_labels, column_type, current_mse)
 		//fmt.Println("kkkkk",gain,part_l,part_r)
 		if gain >= best_gain {
 			best_gain = gain
@@ -190,39 +159,44 @@ func buildTree[T Feature](samples [][]T, samples_labels []float64, selected_feat
 
 	if best_gain > 0 && best_total_l > 0 && best_total_r > 0 {
 		//fmt.Println(best_part_l,best_part_r)
-		node := &TreeNode[T]{}
+		node := &RegressionNode[F]{
+			Size:    len(samples_labels),
+			Measure: current_mse + best_gain,
+		}
 		node.Value = &best_value
-		node.ColumnNo = best_column
-		splitSamples(samples, best_column_type, best_column, best_value, &best_part_l, &best_part_r)
-		node.Left = buildTree(getSamples(samples, best_part_l), getLabels(samples_labels, best_part_l), selected_feature_count)
-		node.Right = buildTree(getSamples(samples, best_part_r), getLabels(samples_labels, best_part_r), selected_feature_count)
+		node.Column = best_column
+		bestPartL, bestPartR := splitSamples(samples, best_column_type, best_column, best_value)
+		node.Left = buildRegressionNode(getSamples(samples, bestPartL), getLabels(samples_labels, bestPartL), selected_feature_count)
+		node.Right = buildRegressionNode(getSamples(samples, bestPartR), getLabels(samples_labels, bestPartR), selected_feature_count)
 		return node
 	}
 
-	return genLeafNode[T](samples_labels)
+	return genRegressionLeafNode[F](samples_labels)
 
 }
 
-func genLeafNode[T Feature](labels []float64) *TreeNode[T] {
+func genRegressionLeafNode[F Feature](labels []float64) *RegressionNode[F] {
 	total := 0.0
 	for _, x := range labels {
 		total += x
 	}
 	avg := total / float64(len(labels))
-	node := &TreeNode[T]{}
+	node := &RegressionNode[F]{
+		Size:    len(labels),
+		Measure: getMSE(labels),
+	}
 	node.Label = avg
 	//fmt.Println(node)
 	return node
 }
 
-func predicate[T Feature](node *TreeNode[T], input []T) float64 {
-	//fmt.Println("node",node)
+func predicate[T Feature](node *RegressionNode[T], input []T) float64 {
 
 	if reflect.ValueOf(node.Value).IsNil() { //leaf node
 		return node.Label
 	}
 
-	c := node.ColumnNo
+	c := node.Column
 	value := input[c]
 
 	switch reflect.TypeOf(value) {
@@ -243,8 +217,9 @@ func predicate[T Feature](node *TreeNode[T], input []T) float64 {
 	return 0
 }
 
-func BuildTree[T Feature](inputs [][]T, labels []float64, samples_count, selected_feature_count int) *Tree[T] {
-	samples := make([][]T, samples_count)
+func BuildTree[F Feature](inputs [][]F, labels []float64, samples_count, selected_feature_count int) *RegressionTree[F] {
+
+	samples := make([][]F, samples_count)
 	samples_labels := make([]float64, samples_count)
 	for i := 0; i < samples_count; i++ {
 		j := int(rand.Float64() * float64(len(inputs)))
@@ -252,12 +227,12 @@ func BuildTree[T Feature](inputs [][]T, labels []float64, samples_count, selecte
 		samples_labels[i] = labels[j]
 	}
 
-	//fmt.Println(samples)
-	tree := &Tree[T]{}
-	tree.Root = buildTree(samples, samples_labels, selected_feature_count)
+	tree := &RegressionTree[F]{}
+	tree.Root = buildRegressionNode(samples, samples_labels, selected_feature_count)
+
 	return tree
 }
 
-func PredicateTree[T Feature](tree *Tree[T], input []T) float64 {
+func (tree *RegressionTree[F]) Predicate(input []F) float64 {
 	return predicate(tree.Root, input)
 }

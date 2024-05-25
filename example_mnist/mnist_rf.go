@@ -8,7 +8,7 @@ import (
 	"os"
 	"runtime"
 
-	"github.com/zeidlermicha/RF.go/RF"
+	"github.com/zeidlermicha/randomForest"
 )
 
 func ReadMNISTLabels(r io.Reader) (labels []byte) {
@@ -101,8 +101,9 @@ func main() {
 
 	//fmt.Println(inputs[0],targets[0])
 
-	forest := RF.BuildForest(inputs, targets, 100, 2000, 30) //100 tries, 2000 samples, 30 features
-
+	//forest := RF.BuildForest(inputs, targets, 100, 2000, 30) //100 tries, 2000 samples, 30 features
+	forest := randomForest.NewClassificationForest[float64, string](1000, 100, 2000, 30)
+	forest.Train(inputs, targets, 100)
 	//RF.DumpForest(forest,"rf.bin")
 	var testLabelData []byte
 	var testImageData [][]byte

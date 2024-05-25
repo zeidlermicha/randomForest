@@ -5,7 +5,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/zeidlermicha/RF.go/RF/Regression"
+	"github.com/zeidlermicha/randomForest"
 )
 
 func main() {
@@ -20,11 +20,23 @@ func main() {
 		train_targets[i] = math.Sin(train_inputs[i][0])
 	}
 
-	forest := Regression.BuildForest(train_inputs, train_targets, 100, len(train_inputs), 1)
-
-	for i := 0; i < 200; i++ {
-		x := []float64{float64(i) / 40.0}
-		fmt.Fprintln(out_f, x[0], forest.Predicate(x))
+	//forest := Regression.BuildForest(train_inputs, train_targets, 100, len(train_inputs), 1)
+	forest := randomForest.NewRegressionForest[float64](10000, 100, 80, 1)
+	forest.Train(train_inputs, train_targets, 100)
+	total := 0.0
+	totalW := 0.0
+	count := 0.0
+	for i := 0; i < 2000; i++ {
+		count += 1
+		x := []float64{float64(i) / 400.0}
+		p := forest.Predicate(x)
+		pw := forest.WeightedPredicate(x)
+		fmt.Fprintln(out_f, x[0], p, pw)
+		total = math.Abs(math.Sin(x[0])-p) * math.Abs(math.Sin(x[0]-p))
+		totalW = math.Abs(math.Sin(x[0])-pw) * math.Abs(math.Sin(x[0])-pw)
 	}
+
+	fmt.Println(math.Sqrt(total / count))
+	fmt.Println(math.Sqrt(totalW / count))
 
 }
