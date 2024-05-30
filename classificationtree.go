@@ -144,7 +144,7 @@ func splitSamples[F Feature](samples [][]F, column_type ColumnType, c int, value
 	return partL, partR
 }
 
-func buildNode[F Feature, L Label](samples [][]F, labels []L, selectedFeatureCount int) *ClassificationNode[F, L] {
+func buildNode[F Feature, L Label](samples [][]F, labels []L, selectedFeatureCount int, depth int) *ClassificationNode[F, L] {
 	column_count := len(samples[0])
 	//split_count := int(math.Log(float64(column_count)))
 	split_count := selectedFeatureCount
@@ -184,7 +184,7 @@ func buildNode[F Feature, L Label](samples [][]F, labels []L, selectedFeatureCou
 		}
 	}
 
-	if best_gain > 0 && best_total_l > 0 && best_total_r > 0 {
+	if best_gain > 0 && best_total_l > 0 && best_total_r > 0 && depth > 0 {
 		node := &ClassificationNode[F, L]{
 			Size:    len(labels),
 			Measure: current_entropy + best_gain,
@@ -192,8 +192,8 @@ func buildNode[F Feature, L Label](samples [][]F, labels []L, selectedFeatureCou
 		node.Value = &best_value
 		node.Column = best_column
 		bestPartL, bestPartR := splitSamples(samples, best_column_type, best_column, best_value)
-		node.Left = buildNode(getSamples(samples, bestPartL), getLabels(labels, bestPartL), selectedFeatureCount)
-		node.Right = buildNode(getSamples(samples, bestPartR), getLabels(labels, bestPartR), selectedFeatureCount)
+		node.Left = buildNode(getSamples(samples, bestPartL), getLabels(labels, bestPartL), selectedFeatureCount, depth-1)
+		node.Right = buildNode(getSamples(samples, bestPartR), getLabels(labels, bestPartR), selectedFeatureCount, depth-1)
 		return node
 	}
 

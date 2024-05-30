@@ -9,6 +9,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type DataDTO[F Feature] struct {
@@ -80,13 +81,13 @@ func (forest *MongoForest[F]) Train() {
 	}
 }
 
-func getData(collection mongo.Collection, game string, count int) (*mongo.Cursor, error) {
-	pipeline := mongo.Pipeline([]bson.D{{{Key: "$match", Value: bson.D{{Key: "game", Value: game}}}}, {{Key: "$sample", Value: bson.D{{Key: "size", Value: count}}}}})
+func getData(collection mongo.Collection, count int) (*mongo.Cursor, error) {
+	pipeline := mongo.Pipeline([]bson.D{{{Key: "$sample", Value: bson.D{{Key: "size", Value: count}}}}})
 	return collection.Aggregate(context.Background(), pipeline)
 }
 
 func (forest *MongoForest[F]) BuildTree() *RegressionTree[F] {
-	cursor, err := getData(*forest.database.Collection("steps"), forest.Game, forest.NSize)
+	cursor, err := getData(*forest.database.Collection(fmt.Sprintf("steps_%s", forest.Game)), forest.NSize)
 	if err != nil {
 		panic(err)
 	}
@@ -106,7 +107,7 @@ func (forest *MongoForest[F]) BuildTree() *RegressionTree[F] {
 	tree.Root = buildRegressionNode(samples, samples_labels, forest.MFeatures, forest.MaxDepth)
 	count := 0
 	e := 0.0
-	cursor, err = getData(*forest.database.Collection("steps"), forest.Game, forest.NSize/10)
+	cursor, err = getData(*forest.database.Collection(fmt.Sprintf("steps_%s", forest.Game)), forest.NSize/10)
 	if err != nil {
 		panic(err)
 	}
@@ -145,7 +146,11 @@ func (forest *MongoForest[F]) WeightedPredicate(input []F) float64 {
 }
 
 func (forest *MongoForest[F]) DumpForest() {
-	forest.database.Collection("forests").InsertOne(context.Background(), forest)
+	upsert := true
+	_, err := forest.database.Collection("forests").ReplaceOne(context.Background(), bson.D{{Key: "game", Value: forest.Game}}, forest, &options.ReplaceOptions{Upsert: &upsert})
+	if err != nil {
+		panic(err)
+	}
 }
 
 func LoadMongoForest[F Feature](database *mongo.Database, game string) *MongoForest[F] {
